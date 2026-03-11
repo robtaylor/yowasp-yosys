@@ -5,7 +5,7 @@ on:
 name: Track upstream activity
 jobs:
   track-commits:
-    runs-on: ubuntu-latest
+    runs-on: github-latest
     steps:
       - name: Check out source code
         uses: actions/checkout@v4
@@ -19,11 +19,11 @@ jobs:
           git -C SymbiYosys-src pull --ff-only origin main
           git -C yosys-slang-src pull --ff-only origin master
       - name: Push updated code
-        uses: stefanzweifel/git-auto-commit-action@v4
+        uses: https://github.com/stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Update dependencies.
   track-releases:
-    runs-on: ubuntu-latest
+    runs-on: github-latest
     steps:
       - name: Check out source code
         uses: actions/checkout@v4
@@ -41,12 +41,12 @@ jobs:
               echo "New branch ${branch} with yosys-src ${ref}"
               git -C yosys-src checkout ${ref}
               # 2023-02-06: https://github.com/YosysHQ/sby/issues/229
-              echo "version=${tag/v/}" >> $GITHUB_OUTPUT
+              echo "version=${tag/v/}" >> $FORGEJO_OUTPUT
               break
             fi;
           done
       - name: Push new branch
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: https://github.com/stefanzweifel/git-auto-commit-action@v5
         if: steps.checkout-tag.outputs.version
         with:
           commit_message: "[autorelease] Yosys ${{ steps.checkout-tag.outputs.version }}."
