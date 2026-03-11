@@ -129,12 +129,14 @@ jobs:
       if: ${{ forge.event_name == 'push' && startsWith(forge.ref, 'refs/heads/develop') }}
       uses: https://github.com/pypa/gh-action-pypi-publish@release/v1
       with:
-        password: ${{ secrets.TEST_PYPI_TOKEN }}
         repository-url: https://test.pypi.org/legacy/
+        attestations: false
+        password: ${{ secrets.TEST_PYPI_TOKEN }}
     - name: Publish wheels to PyPI
       if: ${{ forge.event_name == 'push' && startsWith(forge.ref, 'refs/heads/release') }}
       uses: https://github.com/pypa/gh-action-pypi-publish@release/v1
       with:
+        attestations: false
         password: ${{ secrets.PYPI_TOKEN }}
   publish-javascript:
     needs: check
