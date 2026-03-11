@@ -66,7 +66,8 @@ jobs:
         - '3.11'
         - '3.12'
         - '3.13'
-        - '3.14-dev'
+        - '3.14'
+        - '3.15-dev'
     steps:
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -93,6 +94,8 @@ jobs:
         node-version:
           - 'v18.x'
           - 'v20.x'
+          - 'v22.x'
+          - 'v24.x'
     steps:
     - name: Set up Node.js
       uses: actions/setup-node@v4
