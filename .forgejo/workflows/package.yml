@@ -5,7 +5,7 @@ jobs:
     if: ${{ !contains(forge.event.head_commit.message, 'skip ci') }}
     runs-on: github-latest
     env:
-      RELEASE_BRANCH: ${{ startsWith(forge.ref, 'refs/heads/develop-') || startsWith(forge.ref, 'refs/heads/release-') }}
+      RELEASE_BRANCH: ${{ startsWith(forge.event.ref, 'refs/heads/develop-') || startsWith(forge.event.ref, 'refs/heads/release-') }}
     steps:
       - name: Check out source code
         uses: actions/checkout@v4
@@ -126,14 +126,14 @@ jobs:
         name: dist-pypi
         path: dist/
     - name: Publish wheels to Test PyPI
-      if: ${{ forge.event_name == 'push' && startsWith(forge.ref, 'refs/heads/develop') }}
+      if: ${{ forge.event_name == 'push' && startsWith(forge.event.ref, 'refs/heads/develop') }}
       uses: https://github.com/pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: https://test.pypi.org/legacy/
         attestations: false
         password: ${{ secrets.TEST_PYPI_TOKEN }}
     - name: Publish wheels to PyPI
-      if: ${{ forge.event_name == 'push' && startsWith(forge.ref, 'refs/heads/release') }}
+      if: ${{ forge.event_name == 'push' && startsWith(forge.event.ref, 'refs/heads/release') }}
       uses: https://github.com/pypa/gh-action-pypi-publish@release/v1
       with:
         attestations: false
@@ -158,15 +158,15 @@ jobs:
         name: dist-npmjs
         path: dist/
     - name: Publish package to NPM (dry run)
-      if: ${{ forge.event_name == 'push' && startsWith(forge.ref, 'refs/heads/develop') }}
-      run: npm publish $(find dist -name *.tgz -printf 'file:%p ') ${{ forge.ref == 'refs/heads/release' && '--tag latest' || '--tag release' }} --dry-run
+      if: ${{ forge.event_name == 'push' && startsWith(forge.event.ref, 'refs/heads/develop') }}
+      run: npm publish $(find dist -name *.tgz -printf 'file:%p ') ${{ forge.event.ref == 'refs/heads/release' && '--tag latest' || '--tag release' }} --dry-run
     - name: Publish package to NPM
-      if: ${{ forge.event_name == 'push' && startsWith(forge.ref, 'refs/heads/release') }}
-      run: npm publish $(find dist -name *.tgz -printf 'file:%p ') ${{ forge.ref == 'refs/heads/release' && '--tag latest' || '--tag release' }}
+      if: ${{ forge.event_name == 'push' && startsWith(forge.event.ref, 'refs/heads/release') }}
+      run: npm publish $(find dist -name *.tgz -printf 'file:%p ') ${{ forge.event.ref == 'refs/heads/release' && '--tag latest' || '--tag release' }}
   release:
     needs: check
     runs-on: github-latest
-    if: ${{ contains(forge.event.head_commit.message, 'autorelease') && forge.event_name == 'push' && startsWith(forge.ref, 'refs/heads/develop') }}
+    if: ${{ contains(forge.event.head_commit.message, 'autorelease') && forge.event_name == 'push' && startsWith(forge.event.ref, 'refs/heads/develop') }}
     steps:
       - name: Check out source code
         uses: actions/checkout@v4
@@ -175,6 +175,6 @@ jobs:
           token: ${{ secrets.PUSH_TOKEN }}
       - name: Update release branch
         run: |
-          release_branch=${{ forge.ref }}
+          release_branch=${{ forge.event.ref }}
           release_branch=${release_branch/develop/release}
           git push origin HEAD:${release_branch}
