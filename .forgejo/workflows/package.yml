@@ -93,8 +93,6 @@ jobs:
     strategy:
       matrix:
         node-version:
-          - 'v18.x'
-          - 'v20.x'
           - 'v22.x'
           - 'v24.x'
     steps:
