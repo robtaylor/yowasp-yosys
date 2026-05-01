@@ -2,7 +2,7 @@
 
 export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
 
-WASI_VER=27
+WASI_VER=33
 WASI_SDK=wasi-sdk-${WASI_VER}.0-x86_64-linux
 WASI_SDK_URL=https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_VER}/${WASI_SDK}.tar.gz
 if ! [ -d ${WASI_SDK} ]; then curl -L ${WASI_SDK_URL} | tar xzf -; fi
@@ -33,7 +33,7 @@ ENABLE_READLINE := 0
 ENABLE_PLUGINS := 0
 ENABLE_ZLIB := 0
 
-CXXFLAGS += -I$(pwd)/flex-prefix/include -flto
+CXXFLAGS += -I$(pwd)/flex-prefix/include
 LINKFLAGS += -Wl,-z,stack-size=8388608 -Wl,--stack-first -Wl,--strip-all
 LIBS := -Wl,--whole-archive,$(pwd)/yosys-slang-build/libyosys-slang.a,--no-whole-archive
 END
@@ -44,12 +44,12 @@ make -C yosys-build -f ../yosys-src/Makefile install-dev PREFIX=$(pwd)/yosys-pre
 # Second, build yosys-slang.
 cmake -B yosys-slang-build -S yosys-slang-src \
   -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-  -DCMAKE_TOOLCHAIN_FILE=${WASI_SDK_PATH}/share/cmake/wasi-sdk.cmake \
+  -DCMAKE_TOOLCHAIN_FILE=${WASI_SDK_PATH}/share/cmake/wasi-sdk-p1.cmake \
   -DCMAKE_INSTALL_PREFIX=$(pwd)/yosys-slang-prefix \
   -DCMAKE_BUILD_TYPE=Release \
   -DYOSYS_CONFIG=$(pwd)/yosys-build/yosys-config \
   -DBUILD_AS_PLUGIN=OFF
-cmake --build yosys-slang-build
+cmake --build yosys-slang-build --parallel $(nproc)
 
 # At last, build yosys including yosys-slang as a static library.
-make -C yosys-build -f ../yosys-src/Makefile PREFIX=/
+make -C yosys-build -f ../yosys-src/Makefile PREFIX=/ -j$(nproc)
