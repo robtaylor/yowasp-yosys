@@ -44,6 +44,7 @@ jobs:
         with:
           name: dist-pypi
           path: pypi/dist/
+          retention-days: 1
       - name: Build JavaScript artifact
         run: |
           ./package-npmjs.sh
@@ -53,6 +54,7 @@ jobs:
         with:
           name: dist-npmjs
           path: npmjs/dist/
+          retention-days: 1
       - name: Print ccache statistics
         run: |
           ccache -s
