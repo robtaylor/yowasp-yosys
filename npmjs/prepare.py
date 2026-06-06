@@ -5,7 +5,7 @@ import subprocess
 
 
 yosys_version_raw = subprocess.check_output([
-    "make", "-s", "-C", "../yosys-src", "echo-yosys-ver"
+    "make", "-s", "-C", "../yosys-build", "print-version/fast"
 ], encoding="utf-8").strip()
 
 git_rev_list_raw = subprocess.check_output([

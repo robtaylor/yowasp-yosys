@@ -10,7 +10,7 @@ def version():
     package_git  = parse_git("..")
 
     yosys_version_raw = subprocess.check_output([
-        "make", "-s", "-C", "../yosys-src", "echo-yosys-ver"
+        "make", "-s", "-C", "../yosys-build", "print-version/fast"
     ], encoding="utf-8").strip()
 
     # Yosys can't figure out if it should have a patch version or not.
@@ -20,7 +20,7 @@ def version():
     yosys_minor  = int(yosys_version[2])
     yosys_patch  = int(yosys_version[3] or "0")
     yosys_node   = int(yosys_version[4]) if yosys_version[4] else None
-    
+
     version = f"{yosys_major}.{yosys_minor}.{yosys_patch}"
     if yosys_node is None: # Yosys release
         version += f".0"
