@@ -1,0 +1,184 @@
+# A0 build — provenance-carrying yosys.wasm for Jacquard ADR-0021 Phase 2.
+#
+# This fork's whole delta over Codeberg YoWASP/yosys is one submodule repoint:
+#   yosys-src -> robtaylor/yosys@src-retention-y-ext
+#     └─ abc  -> robtaylor/abc@origin-tracking-clean  (berkeley-abc #487, &origins/vOrigins)
+# Base branch: develop-0.64 (Makefile + wasi-sdk 27 + yosys-slang whole-archive).
+# NOT develop (CMake + wasi-sdk 33) — the patched yosys fork is Makefile-only (no
+# CMakeLists.txt), and develop's CMake migration dropped read_slang. develop-0.64 is
+# the exact recipe that built the pinned `yowasp-yosys 0.64` the on-ramp uses today.
+#
+# Two jobs:
+#   build            — the A0 build gate: does the patched fork compile to WASM under
+#                      WASI, with yosys-slang linked and abc's origins patch intact?
+#                      Produces + smoke-tests + uploads yosys.wasm and the wheel.
+#   provenance-check — the A0 go/no-go: run origin-shell's validated abc_new origins
+#                      flow (comb + sequential) and measure the % of mapped std-cells
+#                      carrying \src. High coverage on seq2 => origins survive the
+#                      WASI in-process abc round-trip => we hold the provenance wasm.
+name: provenance-wasm (A0)
+
+on:
+  push:
+    branches: [yowasp-yosys-integration]
+  workflow_dispatch:
+
+concurrency:
+  group: provenance-wasm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out source (recursive — pulls robtaylor/yosys -> robtaylor/abc, yosys-slang, SymbiYosys)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # build.sh reads git log for SOURCE_DATE_EPOCH
+          submodules: recursive
+
+      - name: Confirm the provenance submodule chain is what we think it is
+        run: |
+          set -e
+          echo "yosys-src  -> $(git -C yosys-src remote get-url origin)  @ $(git -C yosys-src rev-parse HEAD)"
+          echo "  abc      -> $(git -C yosys-src/abc remote get-url origin)  @ $(git -C yosys-src/abc rev-parse HEAD)"
+          echo "yosys-slang-> $(git -C yosys-slang-src remote get-url origin)  @ $(git -C yosys-slang-src rev-parse HEAD)"
+          git -C yosys-src/abc remote get-url origin | grep -q 'robtaylor/abc' \
+            || { echo "::error::abc is not robtaylor/abc — origins patch missing"; exit 1; }
+          git -C yosys-src remote get-url origin | grep -q 'robtaylor/yosys' \
+            || { echo "::error::yosys-src is not robtaylor/yosys — \\src retention missing"; exit 1; }
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install host build deps
+        run: |
+          sudo apt-get update -y
+          # build.sh builds flex-2.6.4 + yosys (Makefile CONFIG=wasi) + yosys-slang (cmake);
+          # host toolchain for flex/yosys-config, cmake for slang, ccache, m4/bison for flex+yosys.
+          sudo apt-get install -y build-essential bison flex m4 ccache cmake curl
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: provwasm-ccache-${{ hashFiles('build.sh') }}-${{ github.sha }}
+          restore-keys: |
+            provwasm-ccache-${{ hashFiles('build.sh') }}-
+            provwasm-ccache-
+
+      - name: Build WASM (yosys + yosys-slang, WASI)
+        run: |
+          ccache --max-size=5G -z
+          MAKEFLAGS=-j$(nproc) ./build.sh
+          ccache -s
+
+      - name: Verify wasm exists
+        run: |
+          test -f yosys-build/yosys.wasm
+          ls -la yosys-build/yosys.wasm
+
+      - name: Package the wheel (yowasp-yosys)
+        run: |
+          python -m pip install --upgrade pip build
+          ./package-pypi.sh
+
+      - name: Smoke test — slang frontend + abc_new command present
+        run: |
+          python -m pip install pypi/dist/*.whl
+          echo "== version ==";        yowasp-yosys -p 'help' >/dev/null && echo ok
+          echo "== read_slang ==";     yowasp-yosys -p 'help read_slang' 2>&1 | head -3
+          echo "== abc_new ==";        yowasp-yosys -p 'help abc_new'    2>&1 | head -3
+          # read_slang is the SV frontend the on-ramp depends on; abc_new is the
+          # origins-carrying std-cell mapper. Both must be present in this wasm.
+          yowasp-yosys -p 'help read_slang' >/dev/null 2>&1 \
+            || { echo "::error::read_slang missing — yosys-slang not linked into this wasm"; exit 1; }
+          yowasp-yosys -p 'help abc_new'    >/dev/null 2>&1 \
+            || { echo "::error::abc_new missing — abc9/aiger2 std-cell path not built"; exit 1; }
+
+      - name: Upload yosys.wasm
+        uses: actions/upload-artifact@v4
+        with:
+          name: provenance-yosys-wasm
+          path: yosys-build/yosys.wasm
+          retention-days: 14
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: provenance-yowasp-yosys-wheel
+          path: pypi/dist/*.whl
+          retention-days: 14
+
+  provenance-check:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Fetch the provenance wheel + install
+        uses: actions/download-artifact@v4
+        with:
+          name: provenance-yowasp-yosys-wheel
+          path: wheel/
+      - run: python -m pip install wheel/*.whl
+
+      - name: Check out origin-shell (validated designs + coverage harness)
+        uses: actions/checkout@v4
+        with:
+          repository: robtaylor/origin-shell
+          path: origin-shell
+
+      - name: Fetch sky130 std-cell liberty (Jacquard's pinned volare hash)
+        run: |
+          python -m pip install 'volare>=0.20'
+          export PDK_ROOT="$HOME/.volare"
+          volare enable --pdk sky130 c6d73a35f524070e85faff4a6a9eef49553ebc2b
+          LIB=$(find "$PDK_ROOT"/sky130 -path '*sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib' | head -1)
+          test -f "$LIB"
+          echo "SKY130_LIB=$LIB" >> "$GITHUB_ENV"
+
+      - name: '\src coverage through abc_new origins flow (comb + seq2)'
+        run: |
+          set -e
+          # WASI-preopen-safe: the yowasp wrapper preopens the CWD, so we stage the
+          # design + liberty into a flat working dir and drive the flow with RELATIVE
+          # paths only (absolute host paths outside CWD are not visible inside WASI).
+          for d in comb seq2; do
+            echo "==================== design: $d ===================="
+            rm -rf work && mkdir work
+            cp "origin-shell/test/designs/$d/src/"*.v work/design.v
+            cp "$SKY130_LIB" work/sky130.lib
+            ( cd work && yowasp-yosys -q -p "
+                read_liberty -lib sky130.lib
+                read_verilog design.v
+                hierarchy -top $d
+                proc; opt; memory; opt; techmap; opt
+                dfflibmap -liberty sky130.lib
+                scratchpad -set abc9.origins_max 100
+                abc_new -script +&dch,-f;&nf -liberty sky130.lib
+                tee -o stat.txt stat -liberty sky130.lib
+                write_json out.json" )
+            python3 - work/out.json "$d" <<'PY'
+          import json, sys
+          mods = json.load(open(sys.argv[1]))['modules']
+          m = list(mods.values())[0]
+          total = withsrc = 0
+          for c in m['cells'].values():
+              if c['type'].startswith('sky130'):
+                  total += 1
+                  withsrc += 'src' in c.get('attributes', {})
+          pct = 100 * withsrc // max(total, 1)
+          print(f"{sys.argv[2]:6}  mapped_cells={total:4}  with_src={withsrc:4}  coverage={pct:3}%")
+          # A0 go/no-go: seq2 (sequential) is the real test — origins must survive the
+          # in-process WASI abc round-trip on flop logic. Fail hard on zero coverage.
+          if sys.argv[2] == 'seq2' and withsrc == 0:
+              print("::error::seq2 has 0%% \\src coverage — origins did not survive WASI abc_new")
+              sys.exit(1)
+          PY
+          done

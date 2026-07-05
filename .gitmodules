@@ -1,7 +1,7 @@
 [submodule "yosys-src"]
 	path = yosys-src
-	url = https://github.com/YosysHQ/yosys
-  branch = master
+	url = https://github.com/robtaylor/yosys
+	branch = src-retention-y-ext
 [submodule "SymbiYosys-src"]
 	path = SymbiYosys-src
 	url = https://github.com/YosysHQ/SymbiYosys
