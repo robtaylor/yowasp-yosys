@@ -162,6 +162,7 @@ jobs:
                 hierarchy -top $d
                 proc; opt; memory; opt; techmap; opt
                 dfflibmap -liberty sky130.lib
+                hierarchy -top $d -purge_lib
                 scratchpad -set abc9.origins_max 100
                 abc_new -script +&dch,-f;&nf -liberty sky130.lib
                 tee -o stat.txt stat -liberty sky130.lib
