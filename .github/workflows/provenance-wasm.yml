@@ -22,6 +22,15 @@ on:
   push:
     branches: [yowasp-yosys-integration]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: >-
+          If set, publish the built wheel as a gpu-eda/yowasp-yosys release under
+          this tag (only after the build + provenance-check pass). Leave empty to
+          just build/validate. Jacquard's src/synth.rs pins this tag + the wheel
+          sha256 (printed in the release body).
+        required: false
+        default: ""
 
 concurrency:
   group: provenance-wasm-${{ github.ref }}
@@ -185,3 +194,52 @@ jobs:
               sys.exit(1)
           PY
           done
+
+  # Publish the built wheel as a durable, in-org release so Jacquard's on-ramp can
+  # fetch a pinned provenance yosys.wasm (ADR 0021 Phase 2 / A2) — no cross-repo
+  # PAT (same-repo GITHUB_TOKEN) and no 14-day artifact expiry. Only runs on a
+  # workflow_dispatch that supplies `release_tag`, and only after the build +
+  # provenance-check pass, so a bad wasm never ships.
+  release:
+    needs: [build, provenance-check]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the built wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: provenance-yowasp-yosys-wheel
+          path: dist
+
+      - name: Checksum the wheel (Jacquard pins this sha256)
+        id: whl
+        run: |
+          set -euo pipefail
+          f=$(ls dist/*.whl)
+          sha=$(sha256sum "$f" | cut -d' ' -f1)
+          echo "path=$f" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$f")" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "### Provenance wheel published" >> "$GITHUB_STEP_SUMMARY"
+          echo "- asset: \`$(basename "$f")\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- sha256: \`$sha\`  ← pin this in Jacquard \`src/synth.rs\` (YOSYS_WASM_SHA256)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- tag: \`${{ inputs.release_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish release + attach wheel
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: yosys.wasm (provenance) — ${{ inputs.release_tag }}
+          make_latest: false
+          files: ${{ steps.whl.outputs.path }}
+          body: |
+            Provenance-carrying `yosys.wasm` for the ADR-0021 Phase-2 RTL-source
+            on-ramp (WS-A / A2). Fork yosys + fork abc `&origins`, yosys-slang SV
+            frontend. Built + validated by this repo's `provenance-wasm` CI
+            (comb + seq2 `\src` coverage). Consumed by the `jacquard sim/cosim`
+            synth on-ramp via the pinned fetch in `src/synth.rs`.
+
+            - asset: `${{ steps.whl.outputs.name }}`
+            - sha256: `${{ steps.whl.outputs.sha256 }}`

@@ -1,3 +1,12 @@
+> **gpu-eda provenance fork.** A patched YoWASP Yosys that preserves Yosys
+> `(* src *)` RTL-source provenance through std-cell mapping (forked yosys + abc
+> `&origins`, mapped via `abc_new`) so the [Jacquard](https://github.com/gpu-eda/Jacquard)
+> RTL on-ramp can emit source-annotated waveforms (ADR 0021 Phase 2). The
+> `yowasp-yosys-integration` branch and its `provenance-wasm` CI build, validate,
+> and release the `yosys.wasm` that `jacquard` fetches. Tracks upstream
+> [YoWASP/yosys](https://github.com/YoWASP/yosys); the only delta is the pinned
+> `yosys-src` fork. The unmodified upstream README follows.
+
 YoWASP Yosys packages
 =====================
 
